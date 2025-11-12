@@ -15,6 +15,29 @@ document.addEventListener("DOMContentLoaded", () => {
       .replace(/'/g, "&#039;");
   }
 
+  // Function to unregister a participant from an activity
+  async function unregisterParticipant(activityName, email) {
+    try {
+      const response = await fetch(
+        `/activities/${encodeURIComponent(activityName)}/unregister?email=${encodeURIComponent(email)}`,
+        {
+          method: "POST",
+        }
+      );
+
+      if (response.ok) {
+        // Refresh the activities list to reflect the change
+        fetchActivities();
+      } else {
+        const result = await response.json();
+        alert("Failed to unregister: " + (result.detail || "An error occurred"));
+      }
+    } catch (error) {
+      alert("Failed to unregister. Please try again.");
+      console.error("Error unregistering:", error);
+    }
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -29,38 +52,56 @@ document.addEventListener("DOMContentLoaded", () => {
         const activityCard = document.createElement("div");
         activityCard.className = "activity-card";
 
-        const participants = Array.isArray(details.participants) ? details.participants : [];
-        const spotsLeft = details.max_participants - participants.length;
+      const participants = Array.isArray(details.participants) ? details.participants : [];
+      const spotsLeft = details.max_participants - participants.length;
 
-        // Build participants HTML: show a bulleted list or a friendly message when empty
-        let participantsHTML = "";
-        if (participants.length > 0) {
-          participantsHTML = `
-            <div class="participants">
-              <strong>Participants:</strong>
-              <ul>
-                ${participants.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}
-              </ul>
-            </div>
-          `;
-        } else {
-          participantsHTML = `
-            <div class="participants">
-              <strong>Participants:</strong>
-              <p class="no-participants">No participants yet</p>
-            </div>
-          `;
-        }
+      // Build participants HTML: show a list with delete buttons or a friendly message when empty
+      let participantsHTML = "";
+      if (participants.length > 0) {
+        participantsHTML = `
+          <div class="participants">
+            <strong>Participants:</strong>
+            <ul>
+              ${participants
+                .map(
+                  (p) =>
+                    `<li class="participant-item">
+                      <span class="participant-name">${escapeHtml(p)}</span>
+                      <button class="delete-btn" data-activity="${escapeHtml(name)}" data-email="${escapeHtml(p)}" title="Remove participant">×</button>
+                    </li>`
+                )
+                .join("")}
+            </ul>
+          </div>
+        `;
+      } else {
+        participantsHTML = `
+          <div class="participants">
+            <strong>Participants:</strong>
+            <p class="no-participants">No participants yet</p>
+          </div>
+        `;
+      }
 
-        activityCard.innerHTML = `
-            <h4>${escapeHtml(name)}</h4>
-            <p>${escapeHtml(details.description)}</p>
-            <p><strong>Schedule:</strong> ${escapeHtml(details.schedule)}</p>
-            <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
-            ${participantsHTML}
-          `;
+      activityCard.innerHTML = `
+          <h4>${escapeHtml(name)}</h4>
+          <p>${escapeHtml(details.description)}</p>
+          <p><strong>Schedule:</strong> ${escapeHtml(details.schedule)}</p>
+          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          ${participantsHTML}
+        `;
 
-        activitiesList.appendChild(activityCard);
+      // Attach delete button event listeners
+      activityCard.querySelectorAll(".delete-btn").forEach((btn) => {
+        btn.addEventListener("click", (event) => {
+          event.preventDefault();
+          const activityName = btn.getAttribute("data-activity");
+          const participantEmail = btn.getAttribute("data-email");
+          if (confirm(`Are you sure you want to unregister ${participantEmail} from ${activityName}?`)) {
+            unregisterParticipant(activityName, participantEmail);
+          }
+        });
+      });        activitiesList.appendChild(activityCard);
 
         // Add option to select dropdown
         const option = document.createElement("option");
@@ -95,6 +136,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities to show the new participant immediately
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
